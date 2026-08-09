@@ -1,0 +1,30 @@
+#python (services)
+__python__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+#Node.js (frontend)
+node_modules/
+.next/
+out/
+
+#variaveis de ambiente (nunca versionar segredos)
+.env
+.env.local
+.env.*.local
+
+#modelos de ML
+*.pkl
+*.joblib
+
+#logs e temporarios
+*.log
+/data/raw/
+data/processed/
+
+#editor
+.vscode/
+.DS_Store
+Thumbs.db
