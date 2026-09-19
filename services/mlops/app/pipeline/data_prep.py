@@ -3,96 +3,69 @@ import numpy as np
 import logging
 from pathlib import Path
 
-# Configuracao de log padronizada
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 def parse_height(height_str: str) -> float:
-    """Converte altura no formato americano (e.g. 5'10") para centimetros."""
     if pd.isna(height_str) or not isinstance(height_str, str):
         return np.nan
     try:
-        parts = height_str.replace('"', '').split("'")
+        parts = height_str.replace('"', '').replace(' ', '').split("'")
         feet = float(parts[0])
         inches = float(parts[1]) if len(parts) > 1 and parts[1] else 0.0
         return round((feet * 30.48) + (inches * 2.54), 2)
     except Exception:
         return np.nan
 
-def parse_reach(reach_str: str) -> float:
-    """Converte envergadura (e.g. 70") para centimetros."""
-    if pd.isna(reach_str) or not isinstance(reach_str, str):
-        return np.nan
-    try:
-        inches = float(reach_str.replace('"', ''))
-        return round(inches * 2.54, 2)
-    except Exception:
-        return np.nan
-
 def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Realiza a limpeza do dataset tabular:
-    - Remocao de valores nulos em colunas vitais
-    - Conversao de unidades imperiais para metricas (cm)
-    - Casting de tipos padronizados
-    """
     logger.info(f"Iniciando limpeza. Shape original: {df.shape}")
 
-    # Remove registros com nomes de atletas nulos
-    df = df.dropna(subset=['fighter_a', 'fighter_b', 'winner']).copy()
+    df = df[df['result_status'] == 'win'].copy()
+    
+    df['winner'] = np.where(df['winner_id'] == df['r_fighter_id'], 'R', 'B')
 
-    # Conversao de alturas e envergaduras
-    for col in ['height_a', 'height_b']:
+    for col in ['r_height', 'b_height']:
         if col in df.columns:
             df[col + '_cm'] = df[col].apply(parse_height)
             df = df.drop(columns=[col])
 
-    for col in ['reach_a', 'reach_b']:
+    for col in ['r_reach_inches', 'b_reach_inches']:
         if col in df.columns:
-            df[col + '_cm'] = df[col].apply(parse_reach)
+            df[col.replace('_inches', '_cm')] = df[col] * 2.54
             df = df.drop(columns=[col])
 
-    # Colunas vitais que nao podem ser nulas para o modelo
+    # Substituir colunas que nao existem, usar o que tem
+    # O master ja tem r_slpm, b_slpm, etc.
     critical_cols = [
-        'slpm_a', 'slpm_b', 
-        'str_def_a', 'str_def_b', 
-        'td_def_a', 'td_def_b',
-        'height_a_cm', 'height_b_cm',
-        'reach_a_cm', 'reach_b_cm'
+        'r_slpm', 'b_slpm', 
+        'r_str_def', 'b_str_def', 
+        'r_td_def', 'b_td_def',
+        'r_height_cm', 'b_height_cm'
     ]
     
-    # Preenchimento de metricas faltantes (imputation basica ou drop)
-    # Por ora, descartamos combates sem metricas basicas de striking
-    missing_before = len(df)
     existing_criticals = [c for c in critical_cols if c in df.columns]
+    missing_before = len(df)
     df = df.dropna(subset=existing_criticals)
     missing_after = len(df)
     
     logger.info(f"Removidas {missing_before - missing_after} linhas com dados criticos nulos.")
-    
-    # Converte idades para inteiros se existirem
-    for col in ['age_a', 'age_b']:
-        if col in df.columns:
-            df[col] = df[col].astype('Int64')
-
     logger.info(f"Limpeza concluida. Shape final: {df.shape}")
     return df
 
 def main():
     base_dir = Path(__file__).resolve().parent.parent.parent
-    raw_path = base_dir / "data" / "raw" / "ufc_data.csv"
-    processed_path = base_dir / "data" / "processed" / "ufc_data_clean.parquet"
+    raw_path = base_dir / "data" / "raw" / "master.csv"
+    processed_path = base_dir / "data" / "processed" / "master_clean.parquet"
 
     if not raw_path.exists():
         logger.error(f"Arquivo fonte nao encontrado: {raw_path}")
         return
 
     logger.info(f"Lendo dataset bruto de: {raw_path}")
-    df_raw = pd.read_csv(raw_path)
+    df_raw = pd.read_csv(raw_path, low_memory=False)
     
     df_clean = clean_dataset(df_raw)
     
-    # Salva dataset final otimizado
     processed_path.parent.mkdir(parents=True, exist_ok=True)
     df_clean.to_parquet(processed_path, index=False)
     logger.info(f"Dataset processado e salvo em: {processed_path}")

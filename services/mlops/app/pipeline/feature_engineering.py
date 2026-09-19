@@ -9,23 +9,20 @@ logger = logging.getLogger(__name__)
 def calculate_deltas(df: pd.DataFrame) -> pd.DataFrame:
     df_feat = df.copy()
     
-    if 'slpm_a' in df_feat.columns and 'slpm_b' in df_feat.columns:
-        df_feat['delta_slpm'] = df_feat['slpm_a'] - df_feat['slpm_b']
+    if 'r_slpm' in df_feat.columns and 'b_slpm' in df_feat.columns:
+        df_feat['delta_slpm'] = df_feat['r_slpm'] - df_feat['b_slpm']
         
-    if 'str_def_a' in df_feat.columns and 'str_def_b' in df_feat.columns:
-        df_feat['delta_str_def'] = df_feat['str_def_a'] - df_feat['str_def_b']
+    if 'r_str_def' in df_feat.columns and 'b_str_def' in df_feat.columns:
+        df_feat['delta_str_def'] = df_feat['r_str_def'] - df_feat['b_str_def']
         
-    if 'td_def_a' in df_feat.columns and 'td_def_b' in df_feat.columns:
-        df_feat['delta_td_def'] = df_feat['td_def_a'] - df_feat['td_def_b']
+    if 'r_td_def' in df_feat.columns and 'b_td_def' in df_feat.columns:
+        df_feat['delta_td_def'] = df_feat['r_td_def'] - df_feat['b_td_def']
         
-    if 'height_a_cm' in df_feat.columns and 'height_b_cm' in df_feat.columns:
-        df_feat['delta_height_cm'] = df_feat['height_a_cm'] - df_feat['height_b_cm']
+    if 'r_height_cm' in df_feat.columns and 'b_height_cm' in df_feat.columns:
+        df_feat['delta_height_cm'] = df_feat['r_height_cm'] - df_feat['b_height_cm']
         
-    if 'reach_a_cm' in df_feat.columns and 'reach_b_cm' in df_feat.columns:
-        df_feat['delta_reach_cm'] = df_feat['reach_a_cm'] - df_feat['reach_b_cm']
-        
-    if 'age_a' in df_feat.columns and 'age_b' in df_feat.columns:
-        df_feat['delta_age'] = df_feat['age_a'].astype(float) - df_feat['age_b'].astype(float)
+    if 'r_reach_cm' in df_feat.columns and 'b_reach_cm' in df_feat.columns:
+        df_feat['delta_reach_cm'] = df_feat['r_reach_cm'] - df_feat['b_reach_cm']
 
     return df_feat
 
@@ -34,14 +31,10 @@ def symmetrize_data(df: pd.DataFrame) -> pd.DataFrame:
     
     rename_map = {}
     for col in df.columns:
-        if col.endswith('_a'):
-            rename_map[col] = col[:-2] + '_b'
-        elif col.endswith('_b'):
-            rename_map[col] = col[:-2] + '_a'
-        elif col.endswith('_a_cm'):
-            rename_map[col] = col.replace('_a_cm', '_b_cm')
-        elif col.endswith('_b_cm'):
-            rename_map[col] = col.replace('_b_cm', '_a_cm')
+        if col.startswith('r_'):
+            rename_map[col] = 'b_' + col[2:]
+        elif col.startswith('b_'):
+            rename_map[col] = 'r_' + col[2:]
             
     df_inverted = df_inverted.rename(columns=rename_map)
     
@@ -50,10 +43,10 @@ def symmetrize_data(df: pd.DataFrame) -> pd.DataFrame:
         df_inverted[c] = -df_inverted[c]
         
     if 'winner' in df_inverted.columns:
-        df_inverted['winner'] = df_inverted['winner'].map({'A': 'B', 'B': 'A'})
+        df_inverted['winner'] = df_inverted['winner'].map({'R': 'B', 'B': 'R'})
         
     df_symmetric = pd.concat([df, df_inverted], ignore_index=True)
-    df_symmetric = df_symmetric.drop_duplicates()
+    df_symmetric = df_symmetric.drop_duplicates(subset=['fight_id', 'winner'])
     
     return df_symmetric
 
@@ -64,9 +57,12 @@ def split_and_save(df: pd.DataFrame, output_dir: Path):
         return
 
     df_valid = df.dropna(subset=['winner']).copy()
-    df_valid['target'] = (df_valid['winner'] == 'A').astype(int)
+    df_valid['target'] = (df_valid['winner'] == 'R').astype(int)
     
-    train_df, temp_df = train_test_split(df_valid, test_size=0.30, random_state=42, stratify=df_valid['target'])
+    features_to_keep = [c for c in df_valid.columns if c.startswith('delta_')] + ['target']
+    df_final = df_valid[features_to_keep].dropna()
+
+    train_df, temp_df = train_test_split(df_final, test_size=0.30, random_state=42, stratify=df_final['target'])
     val_df, test_df = train_test_split(temp_df, test_size=0.50, random_state=42, stratify=temp_df['target'])
     
     logger.info(f"Splits gerados: Treino ({len(train_df)}), Validacao ({len(val_df)}), Teste ({len(test_df)})")
@@ -78,7 +74,7 @@ def split_and_save(df: pd.DataFrame, output_dir: Path):
 
 def main():
     base_dir = Path(__file__).resolve().parent.parent.parent
-    input_path = base_dir / "data" / "processed" / "ufc_data_clean.parquet"
+    input_path = base_dir / "data" / "processed" / "master_clean.parquet"
     output_dir = base_dir / "data" / "features"
     
     if not input_path.exists():
