@@ -1,0 +1,11 @@
+fighter_a,fighter_b,winner,height_a,height_b,reach_a,reach_b,slpm_a,slpm_b,str_def_a,str_def_b,td_def_a,td_def_b,age_a,age_b
+Islam Makhachev,Dustin Poirier,A,5'10",5'9",70",72",2.41,5.36,61,54,90,63,32,35
+Jon Jones,Ciryl Gane,A,6'4",6'4",84",81",4.30,5.04,64,62,95,62,36,33
+Alexander Volkanovski,Ilia Topuria,B,5'6",5'7",71",69",6.19,3.32,58,67,73,92,35,27
+Conor McGregor,Khabib Nurmagomedov,B,5'9",5'10",74",70",5.32,4.10,54,65,70,84,30,29
+Charles Oliveira,Justin Gaethje,A,5'10",5'11",74",70",3.54,7.35,51,53,55,75,32,33
+Max Holloway,Dustin Poirier,B,5'11",5'9",69",72",7.17,5.36,59,54,84,63,27,30
+Amanda Nunes,Julianna Pena,B,5'8",5'7",69",69",4.50,3.10,54,52,82,53,33,32
+Adesanya,Strickland,B,6'4",6'1",80",76",3.93,5.82,56,62,77,68,34,32
+Kamaru Usman,Leon Edwards,B,6'0",6'2",76",74",4.46,2.80,58,53,97,69,35,30
+Empty Fighter,,A,5'8",,,,,,60,,,25,25
