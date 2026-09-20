@@ -1,4 +1,20 @@
 {
-    "accuracy": 0.6058027079303675,
-    "roc_auc": 0.6340302270621279
+    "accuracy": 0.6232,
+    "roc_auc": 0.6651,
+    "n_features": 26,
+    "n_train": 12061,
+    "n_val": 2584,
+    "n_test": 2585,
+    "top_features": {
+        "b_age_over35": 0.0897,
+        "r_age_over35": 0.0874,
+        "delta_age": 0.0824,
+        "delta_elo": 0.0683,
+        "delta_win_rate": 0.0401,
+        "delta_roll_td_atmp": 0.0376,
+        "delta_finish_rate": 0.037,
+        "delta_roll_td_success": 0.0369,
+        "delta_streak": 0.0344,
+        "delta_roll_sig_str_landed_head": 0.0331
+    }
 }
