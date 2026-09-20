@@ -77,6 +77,10 @@ def train_and_evaluate():
 
     with open(model_dir / "feature_columns.json", "w") as f:
         json.dump(list(X_train.columns), f)
+        
+    logger.info("Gerando artefato de explicabilidade (SHAP)...")
+    from app.pipeline.explainability import generate_explanations
+    generate_explanations()
 
 if __name__ == "__main__":
     train_and_evaluate()
