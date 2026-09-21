@@ -1,52 +1,93 @@
+import os
+import logging
+from pathlib import Path
+import pandas as pd
+import joblib
 
-# Aqui fica a lógica de cálculo da predição.
-# POR ENQUANTO: é uma simulação (mock) baseada nos deltas das estatísticas.
-# NO FUTURO: essa função vai carregar o model.pkl (treinado pelo MLOps
-# service) e chamar model.predict_proba() de verdade.
 from app.schemas.predict import PredictRequest, PredictResponse
 
+logger = logging.getLogger(__name__)
+
+class ModelEngine:
+    def __init__(self):
+        self._model = None
+        self._explainer = None
+        self._feature_cols = None
+
+    def _load_artifacts(self):
+        # O diretorio de modelos eh gerado pelo MLOps. Fica em ../../mlops/models
+        # Em producao (Docker), o volume /models sera mapeado para ambos.
+        # Aqui para rodar local vamos buscar no caminho relativo.
+        base_dir = Path(__file__).resolve().parent.parent.parent.parent
+        models_dir = base_dir / "mlops" / "models"
+        
+        # Em ambiente docker, se a variavel MODELS_DIR estiver setada
+        if "MODELS_DIR" in os.environ:
+            models_dir = Path(os.environ["MODELS_DIR"])
+
+        model_path = models_dir / "xgb_v3.joblib"
+        explainer_path = models_dir / "shap_explainer.joblib"
+        
+        if not model_path.exists() or not explainer_path.exists():
+            raise FileNotFoundError(f"Artefatos nao encontrados no diretorio: {models_dir}")
+            
+        logger.info(f"Carregando modelo real de {model_path}")
+        self._model = joblib.load(model_path)
+        
+        logger.info(f"Carregando SHAP Explainer de {explainer_path}")
+        self._explainer = joblib.load(explainer_path)
+
+        import json
+        with open(models_dir / "feature_columns.json", "r") as f:
+            self._feature_cols = json.load(f)
+
+    def reload(self):
+        logger.info("Forcando recarregamento dos artefatos em memoria...")
+        self._model = None
+        self._explainer = None
+        self._feature_cols = None
+
+    def predict(self, request: PredictRequest) -> PredictResponse:
+        if self._model is None:
+            self._load_artifacts()
+
+        # Converte as features para dataframe garantindo a ordem exata das colunas
+        feature_dict = request.features.model_dump()
+        df = pd.DataFrame([feature_dict])[self._feature_cols]
+
+        # Inferencia Real (XGBoost)
+        proba = self._model.predict_proba(df)[0]
+        prob_b = float(proba[0])
+        prob_a = float(proba[1])
+
+        # Explicabilidade Real (SHAP)
+        shap_values = self._explainer.shap_values(df)
+        
+        impact = pd.DataFrame({
+            'Feature': self._feature_cols,
+            'Impacto_SHAP': shap_values[0]
+        })
+        impact['Impacto_Absoluto'] = impact['Impacto_SHAP'].abs()
+        top_factors = impact.sort_values(by='Impacto_Absoluto', ascending=False).head(4)
+        
+        key_factors = []
+        for _, row in top_factors.iterrows():
+            feature_name = row['Feature']
+            valor = float(row['Impacto_SHAP'])
+            favorece = "Lutador A" if valor > 0 else "Lutador B"
+            key_factors.append(f"({favorece}) Vantagem em {feature_name}")
+
+        return PredictResponse(
+            fighter_a_win_probability=round(prob_a, 4),
+            fighter_b_win_probability=round(prob_b, 4),
+            key_factors=key_factors
+        )
+
+# Instancia global do motor de inferencia
+engine = ModelEngine()
+
 def calculate_prediction(data: PredictRequest) -> PredictResponse:
-    
-    #Recebe as stats dos dois lutadores, calcula os deltas (ΔX = A - B) e devolve uma predição. 
-    a=data.fighter_a
-    b=data.fighter_b
+    return engine.predict(data)
 
-    # Calculando os deltas reais — isso é o que futuramente vai virar
-    # o input de verdade pro modelo de Machine Learning.
-    delta_slpm = a.slpm - b.slpm
-    delta_str_acc = a.str_acc - b.str_acc
-    delta_td_def = a.td_def - b.td_def
-    delta_reach = a.reach_cm - b.reach_cm
-    
-    # Soma simples e ponderada dos deltas só pra gerar um número plausível.
-    # Isso NÃO é Machine Learning de verdade ainda, é só pra validar o fluxo.
-    score = (
-        delta_slpm * 0.3 +
-        delta_str_acc * 0.2 +
-        delta_td_def * 0.2 +
-        delta_reach * 0.3
-    )
-    
-    # Transforma o "score" bruto numa probabilidade entre 0 e 1
-    # usando uma função sigmoide simples (mesmo princípio usado por modelos
-    # de classificação de verdade, como Logistic Regression).
-    import math
-    probability_a = 1 / (1 + math.exp(-score/10))
-    probability_b = 1 - probability_a
-    
-    # Monta a explicação (XAI) dos fatores que mais pesaram —
-    # aqui simplificado, mas no modelo real isso viria de algo como
-    # SHAP values ou feature_importances_ do XGBoost.
-    key_factors = []
-    if abs(delta_slpm) > 1:
-        key_factors.append("Diferença significativa em volume de golpes (SLpM)")
-    if abs(delta_td_def) > 10:
-        key_factors.append("Diferença significativa em defesa de quedas (TD Def)")
-    if abs(delta_reach) > 5:
-        key_factors.append("Vantagem de envergadura (Reach)")
-
-    return PredictResponse(
-        fighter_a_win_probability=round(probability_a, 3),
-        fighter_b_win_probability=round(probability_b, 3),
-        key_factors=key_factors, 
-    )      
+def reload_model_engine():
+    engine.reload()
