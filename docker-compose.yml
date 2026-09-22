@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   gateway:
     build:
@@ -26,8 +24,12 @@ services:
       - "8001:8001"
     environment:
       - INTERNAL_API_KEY=mlops_key_123
+      # Diretorio de onde a inferencia carrega os artefatos do modelo.
+      # Compartilhado com o MLOps para que o modelo treinado esteja disponivel.
+      - MODELS_DIR=/app/artifacts
     volumes:
-      - ./services/inference/artifacts:/app/artifacts
+      # Monta os modelos versionados/treinados pelo MLOps no diretorio lido pela inferencia.
+      - ./services/mlops/models:/app/artifacts
     networks:
       - combat_net
 
@@ -42,7 +44,9 @@ services:
       - INFERENCE_URL=http://inference:8001
     volumes:
       - ./data:/app/data
-      - ./services/inference/artifacts:/app/artifacts
+      # O treinamento escreve em /app/models; mapeado para o host e compartilhado
+      # com a inferencia (que le o mesmo diretorio via MODELS_DIR).
+      - ./services/mlops/models:/app/models
     networks:
       - combat_net
 
