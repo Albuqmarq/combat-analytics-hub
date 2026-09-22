@@ -46,50 +46,67 @@ function formatFactor(rawFactor: string, fA: string, fB: string) {
   return { side, text, name };
 }
 
+// Formata a sequencia atual: positivo = vitorias, negativo = derrotas.
+function fmtStreak(streak: number): string {
+  if (streak > 0) return `${streak}V`;
+  if (streak < 0) return `${Math.abs(streak)}D`;
+  return '—';
+}
+
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<PredictResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [isPoundForPound, setIsPoundForPound] = useState(false);
 
-  // States for selected fighters
-  const [fighterA, setFighterA] = useState<FighterBase>(fightersDB[0]); // Jon Jones
-  const [fighterB, setFighterB] = useState<FighterBase>(fightersDB[1]); // Stipe Miocic
+  // Lutadores selecionados (base ordenada por Elo; [0] e [1] sao os dois mais bem ranqueados)
+  const [fighterA, setFighterA] = useState<FighterBase>(fightersDB[0]);
+  const [fighterB, setFighterB] = useState<FighterBase>(fightersDB[1]);
 
   const handlePredict = async () => {
     setLoading(true);
-    // Zera o resultado anterior
+    // Zera o resultado e o erro anteriores
     setResult(null);
+    setError(null);
     try {
       // Se modo P4P estiver ativo, zeramos as discrepancias fisicas cruas
       const delta_height = isPoundForPound ? 0 : fighterA.heightCm - fighterB.heightCm;
       const delta_reach = isPoundForPound ? 0 : fighterA.reachCm - fighterB.reachCm;
-      
+
+      // Mesma codificacao de stance usada no treino (feature_engineering.STANCE_ENCODE).
+      const stanceEnc: Record<string, number> = { Orthodox: 0, Southpaw: 1, Switch: 2 };
+      const encA = stanceEnc[fighterA.stance] ?? -1;
+      const encB = stanceEnc[fighterB.stance] ?? -1;
+
+      // Todas as features abaixo sao derivadas dos dados reais de cada lutador
+      // (mesma escala do treino). As granularidades de golpe por regiao que nao
+      // temos por atleta ficam em 0 (delta neutro) em vez de constantes ficticias.
       const payload: PredictRequest = {
         features: {
           delta_elo: fighterA.elo - fighterB.elo,
           delta_days_inactive: fighterA.daysInactive - fighterB.daysInactive,
-          delta_streak: 1, // Fix temporal mock
+          delta_streak: fighterA.streak - fighterB.streak,
           delta_win_rate: fighterA.winRate - fighterB.winRate,
           delta_finish_rate: fighterA.finishRate - fighterB.finishRate,
-          delta_experience: 5,
+          delta_experience: fighterA.numFights - fighterB.numFights,
           delta_height: delta_height,
           delta_reach: delta_reach,
           delta_age: fighterA.age - fighterB.age,
           r_age_over35: fighterA.age > 35 ? 1 : 0,
           b_age_over35: fighterB.age > 35 ? 1 : 0,
-          stance_matchup: 0,
+          stance_matchup: encA - encB,
           delta_roll_sig_landed: fighterA.strikingLanded - fighterB.strikingLanded,
-          delta_roll_sig_atmp: 1.0,
+          delta_roll_sig_atmp: 0,
           delta_roll_kd: fighterA.knockdownRate - fighterB.knockdownRate,
           delta_roll_td_success: fighterA.takedownSuccess - fighterB.takedownSuccess,
-          delta_roll_td_atmp: 0.5,
-          delta_roll_sub_att: 0,
-          delta_roll_ctrl_seconds: 10.0,
-          delta_roll_sig_str_landed_head: 0.5,
-          delta_roll_sig_str_landed_body: 0.1,
-          delta_roll_sig_str_landed_leg: 0.1,
-          delta_roll_sig_str_landed_distance: 0.5,
-          delta_roll_sig_str_landed_clinch: 0.0,
+          delta_roll_td_atmp: fighterA.tdAtmp - fighterB.tdAtmp,
+          delta_roll_sub_att: fighterA.subAtt - fighterB.subAtt,
+          delta_roll_ctrl_seconds: fighterA.ctrlSeconds - fighterB.ctrlSeconds,
+          delta_roll_sig_str_landed_head: 0,
+          delta_roll_sig_str_landed_body: 0,
+          delta_roll_sig_str_landed_leg: 0,
+          delta_roll_sig_str_landed_distance: 0,
+          delta_roll_sig_str_landed_clinch: 0,
           delta_roll_sig_str_landed_ground: 0,
           delta_roll_total_str_landed: fighterA.strikingLanded - fighterB.strikingLanded
         }
@@ -98,21 +115,13 @@ export default function Home() {
       const data = await fetchPrediction(payload);
       setResult(data);
     } catch (err) {
+      // Nao forjamos um resultado falso: comunicamos a falha de forma honesta.
       console.error(err);
-      // Fallback estático
-      setResult({
-        fighter_a_win_probability: 0.55,
-        fighter_b_win_probability: 0.45,
-        key_factors: [
-          "Lutador A tem vantagem em delta_age",
-          "Lutador B tem vantagem em delta_reach",
-          "Lutador B tem vantagem em delta_roll_td_atmp",
-          "Lutador A tem vantagem em delta_roll_kd",
-          "Lutador A tem vantagem em delta_elo",
-          "Lutador B tem vantagem em delta_days_inactive",
-          "Lutador A tem vantagem em delta_roll_sig_landed"
-        ]
-      });
+      setError(
+        err instanceof Error
+          ? `Nao foi possivel calcular a predicao: ${err.message}`
+          : "Nao foi possivel calcular a predicao. Verifique se o servico esta no ar e tente novamente."
+      );
     } finally {
       setLoading(false);
     }
@@ -157,13 +166,14 @@ export default function Home() {
         <div className="flex flex-col md:flex-row justify-between items-center mb-8 border-b-2 border-mma-lead pb-8 gap-4">
           
           <div className="w-full md:w-5/12 relative group">
-            <select 
+            <select
+              aria-label="Selecionar lutador do canto vermelho (Lutador A)"
               value={fighterA.id}
               onChange={(e) => {
                 const f = fightersDB.find(x => x.id === e.target.value);
-                if (f) { setFighterA(f); setResult(null); }
+                if (f) { setFighterA(f); setResult(null); setError(null); }
               }}
-              className="w-full appearance-none bg-mma-lead/30 border-2 border-mma-blood text-mma-bone font-display text-3xl p-4 uppercase outline-none focus:bg-mma-lead/50 cursor-pointer"
+              className="w-full appearance-none bg-mma-lead/30 border-2 border-mma-blood text-mma-bone font-display text-3xl p-4 uppercase outline-none focus-visible:ring-2 focus-visible:ring-mma-bone focus-visible:ring-offset-2 focus-visible:ring-offset-mma-black focus:bg-mma-lead/50 cursor-pointer"
             >
               {fightersDB.map(f => (
                 <option key={f.id} value={f.id} disabled={f.id === fighterB.id}>{f.name} ({f.category})</option>
@@ -175,13 +185,14 @@ export default function Home() {
           <div className="font-body text-xl font-bold text-mma-steel uppercase tracking-widest text-center w-full md:w-2/12">VS</div>
 
           <div className="w-full md:w-5/12 relative group">
-            <select 
+            <select
+              aria-label="Selecionar lutador do canto azul (Lutador B)"
               value={fighterB.id}
               onChange={(e) => {
                 const f = fightersDB.find(x => x.id === e.target.value);
-                if (f) { setFighterB(f); setResult(null); }
+                if (f) { setFighterB(f); setResult(null); setError(null); }
               }}
-              className="w-full appearance-none bg-mma-lead/30 border-2 border-mma-blue text-mma-bone font-display text-3xl p-4 uppercase outline-none focus:bg-mma-lead/50 cursor-pointer text-right"
+              className="w-full appearance-none bg-mma-lead/30 border-2 border-mma-blue text-mma-bone font-display text-3xl p-4 uppercase outline-none focus-visible:ring-2 focus-visible:ring-mma-bone focus-visible:ring-offset-2 focus-visible:ring-offset-mma-black focus:bg-mma-lead/50 cursor-pointer text-right"
             >
               {fightersDB.map(f => (
                 <option key={f.id} value={f.id} disabled={f.id === fighterA.id}>{f.name} ({f.category})</option>
@@ -228,6 +239,21 @@ export default function Home() {
               <div className="font-body text-xs font-bold text-mma-steel uppercase tracking-widest w-1/3">Peso</div>
               <div className="font-display text-3xl text-mma-blue w-1/3 text-left pl-4">{fighterB.weightKg} kg</div>
             </div>
+            <div className="flex justify-between items-center text-center">
+              <div className="font-display text-3xl text-mma-blood w-1/3 text-right pr-4">{fighterA.elo}</div>
+              <div className="font-body text-xs font-bold text-mma-steel uppercase tracking-widest w-1/3">Rating Elo</div>
+              <div className="font-display text-3xl text-mma-blue w-1/3 text-left pl-4">{fighterB.elo}</div>
+            </div>
+            <div className="flex justify-between items-center text-center">
+              <div className="font-display text-3xl text-mma-blood w-1/3 text-right pr-4">{fighterA.age}</div>
+              <div className="font-body text-xs font-bold text-mma-steel uppercase tracking-widest w-1/3">Idade</div>
+              <div className="font-display text-3xl text-mma-blue w-1/3 text-left pl-4">{fighterB.age}</div>
+            </div>
+            <div className="flex justify-between items-center text-center">
+              <div className="font-display text-3xl text-mma-blood w-1/3 text-right pr-4">{fmtStreak(fighterA.streak)}</div>
+              <div className="font-body text-xs font-bold text-mma-steel uppercase tracking-widest w-1/3">Sequência</div>
+              <div className="font-display text-3xl text-mma-blue w-1/3 text-left pl-4">{fmtStreak(fighterB.streak)}</div>
+            </div>
           </div>
 
           {/* FIGHTER B */}
@@ -243,15 +269,27 @@ export default function Home() {
         </div>
 
         {/* Prediction Execution Area */}
-        <div className="mt-12 border-t-2 border-mma-lead pt-12">
+        <div className="mt-12 border-t-2 border-mma-lead pt-12" aria-busy={loading}>
+          {error && (
+            <div
+              role="alert"
+              className="max-w-4xl mx-auto mb-8 border-2 border-mma-blood bg-mma-blood/10 text-mma-bone p-4 font-body text-sm font-bold uppercase tracking-widest text-center"
+            >
+              {error}
+            </div>
+          )}
           {!result ? (
             <div className="text-center">
-              <button 
+              <button
                 onClick={handlePredict}
                 disabled={loading}
-                className="font-display text-2xl uppercase tracking-wider bg-mma-bone text-mma-black px-12 py-4 hover:bg-mma-blood hover:text-mma-bone transition-colors disabled:opacity-50"
+                aria-label="Executar predição de IA para o confronto selecionado"
+                className="font-display text-2xl uppercase tracking-wider bg-mma-bone text-mma-black px-12 py-4 hover:bg-mma-blood hover:text-mma-bone transition-colors outline-none focus-visible:ring-2 focus-visible:ring-mma-bone focus-visible:ring-offset-2 focus-visible:ring-offset-mma-black disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-3"
               >
-                {loading ? 'Processando...' : 'Executar Predição de IA'}
+                {loading && (
+                  <span className="w-4 h-4 border-2 border-mma-black/40 border-t-mma-black rounded-full animate-spin motion-reduce:animate-none" aria-hidden="true"></span>
+                )}
+                {loading ? 'Processando…' : 'Executar Predição de IA'}
               </button>
             </div>
           ) : (
