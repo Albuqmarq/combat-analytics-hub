@@ -3,75 +3,13 @@
 import React, { useState } from 'react';
 import { RadarChart } from '@/components/RadarChart';
 import { User } from 'lucide-react';
-
-const mockFighters = [
-  { 
-    id: 1, name: 'Jon Jones', category: 'Peso Pesado', record: '27-1-0', country: 'Estados Unidos', flag: '🇺🇸',
-    stats: { striking: 58, takedown: 44, titleFights: 15 },
-    radar: [
-      { subject: 'Volume Golpe', A: 120, fullMark: 150 },
-      { subject: 'Força', A: 130, fullMark: 150 },
-      { subject: 'Wrestling', A: 140, fullMark: 150 },
-      { subject: 'Jiu-Jitsu', A: 110, fullMark: 150 },
-      { subject: 'Cardio', A: 130, fullMark: 150 },
-      { subject: 'Defesa', A: 125, fullMark: 150 },
-    ]
-  },
-  { 
-    id: 2, name: 'Alex Pereira', category: 'Meio-Pesado', record: '10-2-0', country: 'Brasil', flag: '🇧🇷',
-    stats: { striking: 62, takedown: 0, titleFights: 4 },
-    radar: [
-      { subject: 'Volume Golpe', A: 140, fullMark: 150 },
-      { subject: 'Força', A: 150, fullMark: 150 },
-      { subject: 'Wrestling', A: 40, fullMark: 150 },
-      { subject: 'Jiu-Jitsu', A: 30, fullMark: 150 },
-      { subject: 'Cardio', A: 110, fullMark: 150 },
-      { subject: 'Defesa', A: 100, fullMark: 150 },
-    ]
-  },
-  { 
-    id: 3, name: 'Islam Makhachev', category: 'Peso Leve', record: '25-1-0', country: 'Rússia', flag: '🇷🇺',
-    stats: { striking: 59, takedown: 61, titleFights: 3 },
-    radar: [
-      { subject: 'Volume Golpe', A: 110, fullMark: 150 },
-      { subject: 'Força', A: 100, fullMark: 150 },
-      { subject: 'Wrestling', A: 150, fullMark: 150 },
-      { subject: 'Jiu-Jitsu', A: 140, fullMark: 150 },
-      { subject: 'Cardio', A: 145, fullMark: 150 },
-      { subject: 'Defesa', A: 130, fullMark: 150 },
-    ]
-  },
-  { 
-    id: 4, name: 'Ilia Topuria', category: 'Peso Pena', record: '15-0-0', country: 'Espanha', flag: '🇪🇸',
-    stats: { striking: 46, takedown: 56, titleFights: 1 },
-    radar: [
-      { subject: 'Volume Golpe', A: 125, fullMark: 150 },
-      { subject: 'Força', A: 140, fullMark: 150 },
-      { subject: 'Wrestling', A: 120, fullMark: 150 },
-      { subject: 'Jiu-Jitsu', A: 130, fullMark: 150 },
-      { subject: 'Cardio', A: 135, fullMark: 150 },
-      { subject: 'Defesa', A: 120, fullMark: 150 },
-    ]
-  },
-  { 
-    id: 5, name: 'Leon Edwards', category: 'Meio-Médio', record: '22-3-0', country: 'Inglaterra', flag: '🇬🇧',
-    stats: { striking: 53, takedown: 33, titleFights: 3 },
-    radar: [
-      { subject: 'Volume Golpe', A: 110, fullMark: 150 },
-      { subject: 'Força', A: 105, fullMark: 150 },
-      { subject: 'Wrestling', A: 100, fullMark: 150 },
-      { subject: 'Jiu-Jitsu', A: 90, fullMark: 150 },
-      { subject: 'Cardio', A: 140, fullMark: 150 },
-      { subject: 'Defesa', A: 135, fullMark: 150 },
-    ]
-  },
-];
+import { fightersDB } from '@/data/fighters';
 
 export default function FightersPage() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selected, setSelected] = useState(mockFighters[0]);
+  const [selected, setSelected] = useState(fightersDB[0]);
 
-  const filteredFighters = mockFighters.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredFighters = fightersDB.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-12">
