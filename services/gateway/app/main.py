@@ -11,14 +11,19 @@ from pydantic import BaseModel
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+from app.core.logging import StructuredLoggingMiddleware
+
 # Configurando Rate Limiter
 limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title="Combat Analytics Hub - API Gateway",
-    description="Gateway central com Rate Limiting e roteamento resiliente",
+    description="Gateway central com Rate Limiting, Logs Estruturados e Proxy resiliente",
     version="1.0.0"
 )
+
+# Adicionando o middleware de telemetria
+app.add_middleware(StructuredLoggingMiddleware)
 
 # Registrando o limiter
 app.state.limiter = limiter
