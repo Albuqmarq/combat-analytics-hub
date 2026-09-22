@@ -1,25 +1,64 @@
+version: '3.8'
+
 services:
-  redis:
-    image: redis:7-alpine
-    container_name: comabat-redis
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
     ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-      
+      - "8000:8000"
+    environment:
+      - INFERENCE_URL=http://inference:8001
+      - MLOps_URL=http://mlops:8002
+      - INTERNAL_API_KEY=mlops_key_123
+      - ALLOWED_ORIGINS=http://localhost:3000
+    depends_on:
+      - inference
+      - mlops
+    networks:
+      - combat_net
 
   inference:
-      build:
-        context: ./services/inference
-        dockerfile: Dockerfile
-      container_name: combat-inference
-      ports:
-        # formato "PORTA_DA_SUA_MAQUINA:PORTA_DENTRO_DO_CONTAINER" 
-        - "8001:8001"
-      
-      # 'depends_on' garante que o Redis sobe antes dele.
-      depends_on:
-        - redis
+    build:
+      context: ./services/inference
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - INTERNAL_API_KEY=mlops_key_123
+    volumes:
+      - ./services/inference/artifacts:/app/artifacts
+    networks:
+      - combat_net
 
-volumes:
-  redis_data:
+  mlops:
+    build:
+      context: ./services/mlops
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - INTERNAL_API_KEY=mlops_key_123
+      - INFERENCE_URL=http://inference:8001
+    volumes:
+      - ./data:/app/data
+      - ./services/inference/artifacts:/app/artifacts
+    networks:
+      - combat_net
+
+  frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - GATEWAY_URL=http://gateway:8000
+    depends_on:
+      - gateway
+    networks:
+      - combat_net
+
+networks:
+  combat_net:
+    driver: bridge
