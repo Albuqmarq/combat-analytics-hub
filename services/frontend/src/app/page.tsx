@@ -8,29 +8,42 @@ import { fightersDB, FighterBase } from '@/data/fighters';
 
 // Tradutor de variáveis técnicas para o público
 const factorTranslator: Record<string, string> = {
-  'delta_age': 'Juventude (Idade)',
+  'delta_age': 'Juventude (Menor Idade)',
+  'r_age_over35': 'Fator Idade Crítica (Risco acima de 35 anos)',
+  'b_age_over35': 'Fator Idade Crítica (Risco acima de 35 anos)',
   'delta_reach': 'Alcance e Envergadura',
   'delta_roll_td_atmp': 'Iniciativa de Quedas (Grappling)',
   'delta_roll_kd': 'Poder de Nocaute (Knockdowns)',
-  'delta_elo': 'Momento na Carreira (Rankings)',
+  'delta_elo': 'Momento na Carreira (Ranking Elo)',
   'delta_win_rate': 'Consistência de Vitórias',
   'delta_finish_rate': 'Letalidade (Taxa de Finalização)',
   'delta_roll_sig_landed': 'Volume de Golpes Conectados',
   'delta_roll_ctrl_seconds': 'Domínio de Chão (Controle)',
+  'delta_days_inactive': 'Tempo de Atividade (Menos Ferrugem)',
+  'delta_experience': 'Experiência no Octógono'
 };
 
 function formatFactor(rawFactor: string, fA: string, fB: string) {
-  let translated = rawFactor;
-  Object.keys(factorTranslator).forEach(key => {
-    translated = translated.replace(key, factorTranslator[key]);
-  });
+  // rawFactor vem do backend no formato: "(Lutador A) Vantagem em delta_age"
+  let side = 'N';
+  let name = '';
   
-  if (translated.includes("Lutador A")) {
-    return { side: 'A', text: translated.replace("Lutador A tem vantagem em", "").trim(), name: fA };
-  } else if (translated.includes("Lutador B")) {
-    return { side: 'B', text: translated.replace("Lutador B tem vantagem em", "").trim(), name: fB };
+  if (rawFactor.includes("(Lutador A)")) {
+    side = 'A';
+    name = fA;
+  } else if (rawFactor.includes("(Lutador B)")) {
+    side = 'B';
+    name = fB;
   }
-  return { side: 'N', text: translated, name: '' };
+
+  // Pega a ultima palavra que sempre é a variável (ex: delta_age)
+  const parts = rawFactor.split(' ');
+  const featureKey = parts[parts.length - 1];
+  
+  // Traduz a variavel ou deixa ela mesma
+  const text = factorTranslator[featureKey.trim()] || featureKey.trim();
+
+  return { side, text, name };
 }
 
 export default function Home() {
