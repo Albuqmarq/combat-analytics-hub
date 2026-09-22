@@ -21,11 +21,11 @@ export function RadarChart({ data, mode = 'compare' }: RadarChartProps) {
           
           {mode === 'compare' ? (
             <>
-              <Radar name="Lutador A" dataKey="A" stroke="#D91616" fill="#D91616" fillOpacity={0.2} strokeWidth={2} />
-              <Radar name="Lutador B" dataKey="B" stroke="#2B59C3" fill="#2B59C3" fillOpacity={0.2} strokeWidth={2} />
+              <Radar name="Lutador A" dataKey="A" stroke="#D91616" fill="#D91616" fillOpacity={0.2} strokeWidth={2} label={{ fill: '#D91616', fontSize: 12, fontWeight: 'bold' }} />
+              <Radar name="Lutador B" dataKey="B" stroke="#2B59C3" fill="#2B59C3" fillOpacity={0.2} strokeWidth={2} label={{ fill: '#2B59C3', fontSize: 12, fontWeight: 'bold' }} />
             </>
           ) : (
-            <Radar name="Lutador" dataKey="A" stroke="#D91616" fill="#D91616" fillOpacity={0.2} strokeWidth={2} />
+            <Radar name="Lutador" dataKey="A" stroke="#D91616" fill="#D91616" fillOpacity={0.2} strokeWidth={2} label={{ fill: '#D91616', fontSize: 12, fontWeight: 'bold' }} />
           )}
         </RechartsRadarChart>
       </ResponsiveContainer>

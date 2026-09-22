@@ -49,6 +49,7 @@ function formatFactor(rawFactor: string, fA: string, fB: string) {
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<PredictResponse | null>(null);
+  const [isPoundForPound, setIsPoundForPound] = useState(false);
 
   // States for selected fighters
   const [fighterA, setFighterA] = useState<FighterBase>(fightersDB[0]); // Jon Jones
@@ -59,6 +60,10 @@ export default function Home() {
     // Zera o resultado anterior
     setResult(null);
     try {
+      // Se modo P4P estiver ativo, zeramos as discrepancias fisicas cruas
+      const delta_height = isPoundForPound ? 0 : fighterA.heightCm - fighterB.heightCm;
+      const delta_reach = isPoundForPound ? 0 : fighterA.reachCm - fighterB.reachCm;
+      
       const payload: PredictRequest = {
         features: {
           delta_elo: fighterA.elo - fighterB.elo,
@@ -67,8 +72,8 @@ export default function Home() {
           delta_win_rate: fighterA.winRate - fighterB.winRate,
           delta_finish_rate: fighterA.finishRate - fighterB.finishRate,
           delta_experience: 5,
-          delta_height: fighterA.heightCm - fighterB.heightCm,
-          delta_reach: fighterA.reachCm - fighterB.reachCm,
+          delta_height: delta_height,
+          delta_reach: delta_reach,
           delta_age: fighterA.age - fighterB.age,
           r_age_over35: fighterA.age > 35 ? 1 : 0,
           b_age_over35: fighterB.age > 35 ? 1 : 0,
@@ -129,10 +134,29 @@ export default function Home() {
       {/* MATCHUP CARD (BRUTALIST) */}
       <div className="bg-mma-black mb-16">
         
+        {/* POUND FOR POUND TOGGLE */}
+        <div className="flex flex-col md:flex-row justify-center mb-8 gap-4 px-4">
+          <button 
+            onClick={() => {setIsPoundForPound(false); setResult(null);}} 
+            className={`px-8 py-4 font-display text-2xl tracking-wider uppercase border-2 transition-colors ${!isPoundForPound ? 'bg-mma-blood text-mma-bone border-mma-blood' : 'bg-transparent text-mma-steel border-mma-lead hover:text-mma-bone hover:border-mma-bone'}`}
+          >
+            Absoluto (Física + Técnica)
+          </button>
+          <button 
+            onClick={() => {setIsPoundForPound(true); setResult(null);}} 
+            className={`px-8 py-4 font-display text-2xl tracking-wider uppercase border-2 transition-colors ${isPoundForPound ? 'bg-mma-blue text-mma-bone border-mma-blue' : 'bg-transparent text-mma-steel border-mma-lead hover:text-mma-bone hover:border-mma-bone'}`}
+          >
+            Pound for Pound (Só Técnica)
+          </button>
+        </div>
+        <div className="text-center font-body text-xs text-mma-steel uppercase tracking-widest mb-12">
+          {isPoundForPound ? 'As diferenças de alcance e altura foram equalizadas no algoritmo.' : 'A envergadura e altura originais serão usadas no cálculo matemático.'}
+        </div>
+
         {/* DROPDOWNS DE SELEÇÃO */}
         <div className="flex flex-col md:flex-row justify-between items-center mb-8 border-b-2 border-mma-lead pb-8 gap-4">
           
-          <div className="w-full md:w-1/3 relative group">
+          <div className="w-full md:w-5/12 relative group">
             <select 
               value={fighterA.id}
               onChange={(e) => {
@@ -142,15 +166,15 @@ export default function Home() {
               className="w-full appearance-none bg-mma-lead/30 border-2 border-mma-blood text-mma-bone font-display text-3xl p-4 uppercase outline-none focus:bg-mma-lead/50 cursor-pointer"
             >
               {fightersDB.map(f => (
-                <option key={f.id} value={f.id} disabled={f.id === fighterB.id}>{f.name}</option>
+                <option key={f.id} value={f.id} disabled={f.id === fighterB.id}>{f.name} ({f.category})</option>
               ))}
             </select>
             <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-mma-blood pointer-events-none" />
           </div>
 
-          <div className="font-body text-xl font-bold text-mma-steel uppercase tracking-widest">VS</div>
+          <div className="font-body text-xl font-bold text-mma-steel uppercase tracking-widest text-center w-full md:w-2/12">VS</div>
 
-          <div className="w-full md:w-1/3 relative group">
+          <div className="w-full md:w-5/12 relative group">
             <select 
               value={fighterB.id}
               onChange={(e) => {
@@ -160,7 +184,7 @@ export default function Home() {
               className="w-full appearance-none bg-mma-lead/30 border-2 border-mma-blue text-mma-bone font-display text-3xl p-4 uppercase outline-none focus:bg-mma-lead/50 cursor-pointer text-right"
             >
               {fightersDB.map(f => (
-                <option key={f.id} value={f.id} disabled={f.id === fighterA.id}>{f.name}</option>
+                <option key={f.id} value={f.id} disabled={f.id === fighterA.id}>{f.name} ({f.category})</option>
               ))}
             </select>
             <ChevronDown className="absolute left-4 top-1/2 -translate-y-1/2 text-mma-blue pointer-events-none" />
