@@ -18,9 +18,15 @@ const factorTranslator: Record<string, string> = {
   'delta_win_rate': 'Consistência de Vitórias',
   'delta_finish_rate': 'Letalidade (Taxa de Finalização)',
   'delta_roll_sig_landed': 'Volume de Golpes Conectados',
+  'delta_roll_total_str_landed': 'Volume Total de Golpes',
   'delta_roll_ctrl_seconds': 'Domínio de Chão (Controle)',
   'delta_days_inactive': 'Tempo de Atividade (Menos Ferrugem)',
-  'delta_experience': 'Experiência no Octógono'
+  'delta_experience': 'Experiência no Octógono',
+  'delta_streak': 'Embalo Atual (Sequência de Vitórias)',
+  'delta_roll_td_success': 'Quedas Concretizadas (Grappling)',
+  'delta_roll_sub_att': 'Ameaça de Finalização',
+  'delta_height': 'Estatura',
+  'stance_matchup': 'Confronto de Bases (Stance)'
 };
 
 function formatFactor(rawFactor: string, fA: string, fB: string) {

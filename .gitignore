@@ -34,3 +34,6 @@ Thumbs.db
 
 #configurações pessoais do editor (não deve ser compartilhado)
 *.code-workspace
+#arquivos auto-gerados pelo Next.js dev
+services/frontend/AGENTS.md
+services/frontend/CLAUDE.md
