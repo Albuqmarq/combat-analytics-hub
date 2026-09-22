@@ -5,7 +5,9 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import httpx
 import os
+import json
 import logging
+from pathlib import Path
 from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -114,12 +116,46 @@ async def proxy_train(request: Request):
         logger.error(f"Erro inesperado no proxy train: {e}")
         raise HTTPException(status_code=500, detail="Erro interno do servidor")
 
-# Mock rotas para frontend
+# Catalogo de lutadores servido pelo backend (evita embutir ~2MB no bundle do front).
+# Carregado uma unica vez em memoria na subida do servico.
+_FIGHTERS_PATH = Path(__file__).resolve().parent / "data" / "fighters.json"
+try:
+    _FIGHTERS = json.loads(_FIGHTERS_PATH.read_text(encoding="utf-8"))
+except Exception as e:
+    logger.error(f"Nao foi possivel carregar {_FIGHTERS_PATH}: {e}")
+    _FIGHTERS = []
+
+# Indice por id e uma projecao "leve" para listagem (sem radar/stats detalhados).
+_FIGHTERS_BY_ID = {f["id"]: f for f in _FIGHTERS}
+_LIGHT_FIELDS = ("id", "name", "category", "record", "elo", "country", "flag")
+_FIGHTERS_LIGHT = [{k: f[k] for k in _LIGHT_FIELDS} for f in _FIGHTERS]
+logger.info(f"Catalogo de lutadores carregado: {len(_FIGHTERS)} atletas")
+
+
 @app.get("/api/v1/fighters")
-@limiter.limit("20/minute")
-def get_fighters(request: Request):
-    # Futuramente buscara do MongoDB/Feature Store
-    return {"fighters": [{"id": 1, "name": "Jon Jones"}, {"id": 2, "name": "Alex Pereira"}]}
+@limiter.limit("60/minute")
+def get_fighters(request: Request, search: str = "", limit: int = 50, offset: int = 0):
+    """Lista paginada e pesquisavel (payload leve). O front busca sob demanda.
+    O limite alto e permitido porque a projecao leve e pequena (~80 bytes/atleta)."""
+    limit = max(1, min(limit, 3000))
+    offset = max(0, offset)
+    q = search.strip().lower()
+    items = _FIGHTERS_LIGHT
+    if q:
+        items = [f for f in items if q in f["name"].lower()]
+    total = len(items)
+    return {"total": total, "limit": limit, "offset": offset, "items": items[offset:offset + limit]}
+
+
+@app.get("/api/v1/fighters/{fighter_id}")
+@limiter.limit("120/minute")
+def get_fighter(request: Request, fighter_id: str):
+    """Retorna o perfil completo de um lutador (todas as stats + radar)."""
+    fighter = _FIGHTERS_BY_ID.get(fighter_id)
+    if not fighter:
+        raise HTTPException(status_code=404, detail="Lutador nao encontrado")
+    return fighter
+
 
 @app.get("/api/v1/events")
 @limiter.limit("20/minute")
