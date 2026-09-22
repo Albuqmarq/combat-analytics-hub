@@ -8,8 +8,10 @@ services:
     environment:
       - INFERENCE_URL=http://inference:8001
       - MLOps_URL=http://mlops:8002
-      - INTERNAL_API_KEY=mlops_key_123
-      - ALLOWED_ORIGINS=http://localhost:3000
+      # Segredos vem do arquivo .env (veja .env.example). Nunca versionar valores reais.
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+      - ADMIN_API_KEY=${ADMIN_API_KEY}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
     depends_on:
       - inference
       - mlops
@@ -23,7 +25,7 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - INTERNAL_API_KEY=mlops_key_123
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
       # Diretorio de onde a inferencia carrega os artefatos do modelo.
       # Compartilhado com o MLOps para que o modelo treinado esteja disponivel.
       - MODELS_DIR=/app/artifacts
@@ -40,10 +42,10 @@ services:
     ports:
       - "8002:8002"
     environment:
-      - INTERNAL_API_KEY=mlops_key_123
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
       - INFERENCE_URL=http://inference:8001
     volumes:
-      - ./data:/app/data
+      - ./services/mlops/data:/app/data
       # O treinamento escreve em /app/models; mapeado para o host e compartilhado
       # com a inferencia (que le o mesmo diretorio via MODELS_DIR).
       - ./services/mlops/models:/app/models

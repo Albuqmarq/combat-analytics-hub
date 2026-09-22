@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -43,7 +43,21 @@ app.add_middleware(
 # Endpoints internos
 INFERENCE_URL = os.getenv("INFERENCE_URL", "http://localhost:8001")
 MLOPS_URL = os.getenv("MLOPS_URL", "http://localhost:8002")
-INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "test_key_123")
+# Segredos sem default fraco: devem vir do ambiente (.env / secrets do orquestrador).
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY")
+
+if not INTERNAL_API_KEY:
+    logger.warning("INTERNAL_API_KEY nao definido no ambiente; chamadas internas irao falhar.")
+
+def verify_admin_key(x_admin_api_key: str = Header(default=None)):
+    """Protege rotas administrativas (ex.: disparo de treino). Exige o header
+    x-admin-api-key igual a ADMIN_API_KEY. Se a chave nao estiver configurada,
+    a rota fica indisponivel (fail-closed) em vez de aberta."""
+    if not ADMIN_API_KEY:
+        raise HTTPException(status_code=503, detail="Rota administrativa desabilitada (ADMIN_API_KEY nao configurada)")
+    if not x_admin_api_key or x_admin_api_key != ADMIN_API_KEY:
+        raise HTTPException(status_code=403, detail="Acesso negado: chave de administrador invalida ou ausente")
 
 class PredictPayload(BaseModel):
     features: dict
@@ -53,7 +67,7 @@ def health_check():
     return {"status": "ok", "service": "gateway"}
 
 @app.post("/api/v1/predict")
-@limiter.limit("5/minute")
+@limiter.limit("30/minute")
 async def proxy_predict(request: Request, payload: PredictPayload):
     """
     Repassa a predicao para o Inference Service de forma resiliente.
@@ -76,13 +90,13 @@ async def proxy_predict(request: Request, payload: PredictPayload):
         logger.error(f"Erro inesperado no proxy predict: {e}")
         raise HTTPException(status_code=500, detail="Erro interno do servidor")
 
-@app.post("/api/v1/admin/train")
+@app.post("/api/v1/admin/train", dependencies=[Depends(verify_admin_key)])
 @limiter.limit("1/minute")
 async def proxy_train(request: Request):
     """
-    Aciona o pipeline de treinamento no MLOps. Rota restrita e rigorosamente baseada em rate limit.
+    Aciona o pipeline de treinamento no MLOps.
+    Protegida por token de administrador (header x-admin-api-key) + rate limit + CORS estrito.
     """
-    # Aqui, poderiamos verificar um token JWT admin. Por simplicidade, assumimos Rate Limit + CORS estrito.
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
