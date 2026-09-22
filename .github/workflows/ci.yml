@@ -1,0 +1,54 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-python-services:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [inference, mlops, gateway]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          
+      - name: Install dependencies
+        working-directory: ./services/${{ matrix.service }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest httpx
+          
+      - name: Run tests
+        working-directory: ./services/${{ matrix.service }}
+        env:
+          INTERNAL_API_KEY: "test_key_123"
+        run: |
+          if [ -d "tests" ]; then
+            python -m pytest tests/
+          else
+            echo "No tests found for ${{ matrix.service }}"
+          fi
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          
+      - name: Install and Build
+        working-directory: ./services/frontend
+        run: |
+          npm ci
+          npm run build
