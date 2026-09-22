@@ -102,7 +102,10 @@ export default function Home() {
           "Lutador A tem vantagem em delta_age",
           "Lutador B tem vantagem em delta_reach",
           "Lutador B tem vantagem em delta_roll_td_atmp",
-          "Lutador A tem vantagem em delta_roll_kd"
+          "Lutador A tem vantagem em delta_roll_kd",
+          "Lutador A tem vantagem em delta_elo",
+          "Lutador B tem vantagem em delta_days_inactive",
+          "Lutador A tem vantagem em delta_roll_sig_landed"
         ]
       });
     } finally {

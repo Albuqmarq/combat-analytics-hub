@@ -68,7 +68,7 @@ class ModelEngine:
             'Impacto_SHAP': shap_values[0]
         })
         impact['Impacto_Absoluto'] = impact['Impacto_SHAP'].abs()
-        top_factors = impact.sort_values(by='Impacto_Absoluto', ascending=False).head(4)
+        top_factors = impact.sort_values(by='Impacto_Absoluto', ascending=False).head(8)
         
         key_factors = []
         for _, row in top_factors.iterrows():
