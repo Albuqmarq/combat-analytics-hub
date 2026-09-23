@@ -157,6 +157,19 @@ def get_fighter(request: Request, fighter_id: str):
     return fighter
 
 
+_METRICS_PATH = Path(__file__).resolve().parent / "data" / "model_metrics.json"
+
+
+@app.get("/api/v1/model/metrics")
+@limiter.limit("60/minute")
+def get_model_metrics(request: Request):
+    """Metricas honestas do modelo (teste temporal), para a landing page."""
+    try:
+        return json.loads(_METRICS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        raise HTTPException(status_code=404, detail="Metricas do modelo indisponiveis")
+
+
 @app.get("/api/v1/events")
 @limiter.limit("20/minute")
 def get_events(request: Request):

@@ -1,0 +1,20 @@
+{
+    "accuracy": 0.6265,
+    "roc_auc": 0.6797,
+    "n_features": 26,
+    "n_train": 12060,
+    "n_val": 2584,
+    "n_test": 2586,
+    "top_features": {
+        "delta_elo": 0.081,
+        "delta_age": 0.0777,
+        "b_age_over35": 0.0558,
+        "r_age_over35": 0.046,
+        "delta_roll_td_success": 0.0431,
+        "delta_roll_sig_str_landed_head": 0.0423,
+        "delta_roll_td_atmp": 0.0416,
+        "delta_streak": 0.0407,
+        "delta_reach": 0.038,
+        "delta_roll_sig_str_landed_ground": 0.0366
+    }
+}

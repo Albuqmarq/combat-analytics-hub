@@ -1,4 +1,4 @@
-import { PredictRequest, PredictResponse, FighterBase, FighterListResponse } from '@/types';
+import { PredictRequest, PredictResponse, FighterBase, FighterListResponse, ModelMetrics } from '@/types';
 
 // Funcoes utilitarias chamadas pelos componentes React (Client e Server).
 // Elas apontam para os proprios Route Handlers do Next.js (/api/...) 
@@ -35,6 +35,15 @@ export async function fetchFighter(id: string): Promise<FighterBase> {
   const res = await fetch(`/api/fighters/${encodeURIComponent(id)}`);
   if (!res.ok) {
     throw new Error('Falha ao buscar o perfil do lutador');
+  }
+  return res.json();
+}
+
+// Metricas honestas do modelo (teste temporal), exibidas na landing page.
+export async function fetchModelMetrics(): Promise<ModelMetrics> {
+  const res = await fetch('/api/model-metrics');
+  if (!res.ok) {
+    throw new Error('Falha ao buscar as métricas do modelo');
   }
   return res.json();
 }

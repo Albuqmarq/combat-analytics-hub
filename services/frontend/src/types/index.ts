@@ -82,6 +82,16 @@ export interface FighterListResponse {
   items: FighterLight[];
 }
 
+export interface ModelMetrics {
+  accuracy: number;
+  roc_auc: number;
+  n_features: number;
+  n_train: number;
+  n_val: number;
+  n_test: number;
+  top_features: Record<string, number>;
+}
+
 export interface Event {
   id: number;
   name: string;

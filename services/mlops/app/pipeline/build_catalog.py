@@ -160,6 +160,14 @@ def build_catalog():
     out_path.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
     logger.info(f"Catalogo gerado: {len(out)} atletas (>= {MIN_FIGHTS} lutas) -> {out_path}")
 
+    # Publica uma copia das metricas do modelo para o Gateway servir na landing page.
+    metrics_src = base_dir / "models" / "metrics.json"
+    if metrics_src.exists():
+        (out_path.parent / "model_metrics.json").write_text(
+            metrics_src.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        logger.info("Metricas do modelo publicadas para o Gateway.")
+
 
 if __name__ == "__main__":
     build_catalog()
