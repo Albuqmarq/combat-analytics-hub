@@ -44,6 +44,11 @@ services:
     environment:
       - INTERNAL_API_KEY=${INTERNAL_API_KEY}
       - INFERENCE_URL=http://inference:8001
+      # Conector de dados Kaggle (opcional; sem estas variaveis o pipeline usa o master.csv atual).
+      - KAGGLE_USERNAME=${KAGGLE_USERNAME:-}
+      - KAGGLE_KEY=${KAGGLE_KEY:-}
+      - KAGGLE_DATASET=${KAGGLE_DATASET:-}
+      - KAGGLE_CSV=${KAGGLE_CSV:-}
     volumes:
       - ./services/mlops/data:/app/data
       # O treinamento escreve em /app/models; mapeado para o host e compartilhado
