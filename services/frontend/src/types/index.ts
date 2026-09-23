@@ -42,6 +42,56 @@ export interface Fighter {
   name: string;
 }
 
+// Projecao leve usada nas listagens/seletores (vem de GET /api/v1/fighters).
+export interface FighterLight {
+  id: string;
+  name: string;
+  category: string;
+  record: string;
+  elo: number;
+  country: string;
+  flag: string;
+}
+
+// Perfil completo (vem de GET /api/v1/fighters/{id}).
+export interface FighterBase extends FighterLight {
+  age: number;
+  heightCm: number;
+  reachCm: number;
+  weightKg: number;
+  stance: string;
+  daysInactive: number;
+  streak: number;
+  numFights: number;
+  winRate: number;
+  finishRate: number;
+  strikingLanded: number;
+  takedownSuccess: number;
+  knockdownRate: number;
+  ctrlSeconds: number;
+  subAtt: number;
+  tdAtmp: number;
+  stats: { striking: number; takedown: number; titleFights: number };
+  radar: { subject: string; A: number; fullMark: number }[];
+}
+
+export interface FighterListResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  items: FighterLight[];
+}
+
+export interface ModelMetrics {
+  accuracy: number;
+  roc_auc: number;
+  n_features: number;
+  n_train: number;
+  n_val: number;
+  n_test: number;
+  top_features: Record<string, number>;
+}
+
 export interface Event {
   id: number;
   name: string;

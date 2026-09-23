@@ -15,9 +15,12 @@ out/
 .env.local
 .env.*.local
 
-#modelos de ML
+#modelos de ML (artefatos grandes ignorados por padrao...)
 *.pkl
 *.joblib
+#...exceto o modelo servido em producao, para o deploy funcionar a partir de um clone limpo
+!services/mlops/models/xgb_v3.joblib
+!services/mlops/models/shap_explainer.joblib
 
 #logs e temporarios
 *.log
@@ -31,3 +34,6 @@ Thumbs.db
 
 #configurações pessoais do editor (não deve ser compartilhado)
 *.code-workspace
+#arquivos auto-gerados pelo Next.js dev
+services/frontend/AGENTS.md
+services/frontend/CLAUDE.md

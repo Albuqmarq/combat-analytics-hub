@@ -1,16 +1,27 @@
 import type { Metadata } from "next";
-import { Inter, Oswald } from "next/font/google";
+import Link from "next/link";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const inter = Inter({
+// Fontes auto-hospedadas (arquivos em ./fonts) para que o build nao dependa de
+// rede ao Google Fonts — essencial para builds em Docker / ambientes offline.
+const inter = localFont({
   variable: "--font-inter",
-  subsets: ["latin"],
+  display: "swap",
+  src: [
+    { path: "./fonts/Inter-Regular.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/Inter-Medium.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/Inter-Bold.woff2", weight: "700", style: "normal" },
+  ],
 });
 
-const oswald = Oswald({
+const oswald = localFont({
   variable: "--font-oswald",
-  subsets: ["latin"],
-  weight: ["500", "700"],
+  display: "swap",
+  src: [
+    { path: "./fonts/Oswald-Medium.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/Oswald-Bold.woff2", weight: "700", style: "normal" },
+  ],
 });
 
 export const metadata: Metadata = {
@@ -29,12 +40,13 @@ export default function RootLayout({
         {/* Navbar */}
         <nav className="border-b-2 border-mma-lead bg-mma-black">
           <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-            <div className="font-display text-2xl font-bold tracking-wider text-mma-bone uppercase">
+            <Link href="/" className="font-display text-2xl font-bold tracking-wider text-mma-bone uppercase">
               Combat <span className="text-mma-blood">Hub</span>
-            </div>
+            </Link>
             <div className="flex gap-6 font-body text-sm font-bold uppercase tracking-widest text-mma-steel">
-              <a href="/" className="hover:text-mma-bone transition-colors">Arena</a>
-              <a href="/fighters" className="hover:text-mma-bone transition-colors">Lutadores</a>
+              <Link href="/" className="hover:text-mma-bone transition-colors">Início</Link>
+              <Link href="/arena" className="hover:text-mma-bone transition-colors">Arena</Link>
+              <Link href="/fighters" className="hover:text-mma-bone transition-colors">Lutadores</Link>
             </div>
           </div>
         </nav>
