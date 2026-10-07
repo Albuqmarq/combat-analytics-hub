@@ -7,7 +7,8 @@ from pydantic import BaseModel
 from app.pipeline.data_prep import main as run_data_prep
 from app.pipeline.feature_engineering import main as run_feature_engineering
 from app.pipeline.train_model import train_and_evaluate
-from app.pipeline.scraper import run_scraper
+from app.pipeline.data_connector import run_data_connector
+from app.pipeline.build_catalog import build_catalog
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -34,17 +35,20 @@ class PipelineResponse(BaseModel):
 def execute_full_pipeline():
     logger.info("=== INICIANDO PIPELINE DE MLOPS ===")
     try:
-        logger.info("1/4 - Extraindo dados web...")
-        run_scraper()
-        
-        logger.info("2/4 - Preparando dados limpos...")
+        logger.info("1/5 - Ingestao de dados (conector Kaggle, com fallback)...")
+        run_data_connector()
+
+        logger.info("2/5 - Preparando dados limpos...")
         run_data_prep()
-        
-        logger.info("3/4 - Engenharia de features temporais...")
+
+        logger.info("3/5 - Engenharia de features temporais...")
         run_feature_engineering()
-        
-        logger.info("4/4 - Treinando modelo XGBoost e gerando XAI...")
+
+        logger.info("4/5 - Treinando modelo XGBoost e gerando XAI...")
         train_and_evaluate()
+
+        logger.info("5/5 - Regerando catalogo de lutadores...")
+        build_catalog()
         
         logger.info("Notificando Inference Service para recarregamento...")
         try:

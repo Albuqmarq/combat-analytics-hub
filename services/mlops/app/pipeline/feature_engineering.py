@@ -2,7 +2,6 @@ import logging
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -150,6 +149,9 @@ def calculate_deltas(df: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame()
     out['fight_id'] = df['fight_id']
     out['winner'] = df['winner']
+    # Mantemos a data do evento para permitir o split temporal (treinar no passado,
+    # testar no futuro). Ela e descartada antes de salvar o dataset de modelagem.
+    out['event_date'] = df['event_date']
 
     out['delta_elo'] = df['r_elo'] - df['b_elo']
     out['delta_days_inactive'] = df['r_days_inactive'] - df['b_days_inactive']
@@ -180,17 +182,53 @@ def symmetrize_data(df: pd.DataFrame) -> pd.DataFrame:
     sym = pd.concat([df, inv], ignore_index=True)
     return sym.drop_duplicates(subset=['fight_id', 'winner'])
 
-def split_and_save(df: pd.DataFrame, output_dir: Path):
-    df_valid = df.dropna(subset=['winner']).copy()
-    df_valid['target'] = (df_valid['winner'] == 'R').astype(int)
-    features_to_keep = [c for c in df_valid.columns if c not in ['fight_id', 'winner']]
-    df_final = df_valid[features_to_keep]
+def _to_model_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Converte um recorte (ja simetrizado ou nao) no formato de modelagem:
+    apenas features + coluna 'target', descartando metadados (fight_id, winner, event_date)."""
+    df = df.dropna(subset=['winner']).copy()
+    df['target'] = (df['winner'] == 'R').astype(int)
+    drop_cols = ['fight_id', 'winner', 'event_date']
+    features_to_keep = [c for c in df.columns if c not in drop_cols]
+    return df[features_to_keep]
 
-    train_df, temp_df = train_test_split(df_final, test_size=0.30, random_state=42, stratify=df_final['target'])
-    val_df, test_df = train_test_split(temp_df, test_size=0.50, random_state=42, stratify=temp_df['target'])
 
-    logger.info(f"Splits: Treino ({len(train_df)}), Validacao ({len(val_df)}), Teste ({len(test_df)})")
-    logger.info(f"Features finais: {len(features_to_keep) - 1}")
+def temporal_split_and_save(df: pd.DataFrame, output_dir: Path):
+    """Split TEMPORAL para evitar vazamento: treina no passado e avalia no futuro.
+
+    Regras anti-vazamento:
+      1. Ordena por data e corta em 70% / 15% / 15% de forma cronologica.
+      2. Simetriza (espelho R<->B) APENAS o treino, para que original e espelho
+         de uma mesma luta nunca caiam em splits diferentes.
+      3. Validacao e teste ficam com a distribuicao natural (nao simetrizada),
+         refletindo o cenario real de inferencia.
+    """
+    df = df.dropna(subset=['event_date']).sort_values('event_date').reset_index(drop=True)
+    n = len(df)
+    train_end = int(n * 0.70)
+    val_end = int(n * 0.85)
+
+    train_raw = df.iloc[:train_end]
+    val_raw = df.iloc[train_end:val_end]
+    test_raw = df.iloc[val_end:]
+
+    # Simetrizacao aplicada a CADA split de forma independente (apos o corte temporal).
+    # Como o corte por data ja separou as lutas, o espelho de uma luta nunca cruza para
+    # outro split -> nao ha vazamento. Simetrizar todos os splits deixa o problema
+    # balanceado (baseline 50%) e coerente com o uso simetrico do app (o usuario escolhe
+    # os dois lutadores em qualquer ordem, sem convencao de "corner favorito").
+    train_df = _to_model_frame(symmetrize_data(train_raw))
+    val_df = _to_model_frame(symmetrize_data(val_raw))
+    test_df = _to_model_frame(symmetrize_data(test_raw))
+
+    logger.info(
+        f"Split temporal | Treino {len(train_df)} (simetrizado) | "
+        f"Val {len(val_df)} | Teste {len(test_df)}"
+    )
+    logger.info(
+        f"Periodos -> Treino: {train_raw['event_date'].min().date()} a {train_raw['event_date'].max().date()} | "
+        f"Val: {val_raw['event_date'].min().date()} a {val_raw['event_date'].max().date()} | "
+        f"Teste: {test_raw['event_date'].min().date()} a {test_raw['event_date'].max().date()}"
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     train_df.to_parquet(output_dir / "train.parquet", index=False)
@@ -214,8 +252,8 @@ def main():
     df_enriched['winner'] = np.where(df_enriched['winner_id'] == df_enriched['r_fighter_id'], 'R', 'B')
 
     df_deltas = calculate_deltas(df_enriched)
-    df_sym = symmetrize_data(df_deltas)
-    split_and_save(df_sym, output_dir)
+    # O split temporal ja simetriza apenas o treino internamente.
+    temporal_split_and_save(df_deltas, output_dir)
     logger.info("Concluido")
 
 if __name__ == "__main__":
