@@ -12,9 +12,15 @@ services:
       - INTERNAL_API_KEY=${INTERNAL_API_KEY}
       - ADMIN_API_KEY=${ADMIN_API_KEY}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      # Driver psycopg2 explicito (SQLAlchemy 2.1 usa psycopg v3 por padrao em 'postgresql://').
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-combat_user}:${POSTGRES_PASSWORD:-combat_pass}@db:5432/${POSTGRES_DB:-combat_db}
     depends_on:
-      - inference
-      - mlops
+      inference:
+        condition: service_started
+      mlops:
+        condition: service_started
+      db:
+        condition: service_healthy
     networks:
       - combat_net
 
@@ -57,6 +63,25 @@ services:
     networks:
       - combat_net
 
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-combat_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-combat_pass}
+      - POSTGRES_DB=${POSTGRES_DB:-combat_db}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Healthcheck para o gateway so iniciar quando o Postgres aceitar conexoes.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-combat_user} -d ${POSTGRES_DB:-combat_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - combat_net
+
   frontend:
     build:
       context: ./services/frontend
@@ -73,3 +98,6 @@ services:
 networks:
   combat_net:
     driver: bridge
+
+volumes:
+  pgdata:
