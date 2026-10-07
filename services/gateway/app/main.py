@@ -14,9 +14,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 from app.core.logging import StructuredLoggingMiddleware
+from app.db.database import init_db
 
 # Configurando Rate Limiter
 limiter = Limiter(key_func=get_remote_address)
+
+# Inicializa o banco de dados (com retry enquanto o Postgres sobe).
+init_db()
 
 app = FastAPI(
     title="Combat Analytics Hub - API Gateway",
