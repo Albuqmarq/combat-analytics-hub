@@ -64,6 +64,12 @@ def verify_admin_key(x_admin_api_key: str = Header(default=None)):
 class PredictPayload(BaseModel):
     features: dict
 
+
+class MatchupPayload(BaseModel):
+    red: str
+    blue: str
+    mode: str = "absoluto"
+
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "gateway"}
@@ -157,7 +163,167 @@ def get_fighter(request: Request, fighter_id: str):
     return fighter
 
 
+# Traducao dos fatores SHAP para rotulos + detalhe amigavel (para o veredito da Arena).
+def _detail_reach(a, b, w, l): return f"{abs(w['reachCm'] - l['reachCm'])} cm a mais de envergadura para controlar a distancia."
+def _detail_age(a, b, w, l): return f"{abs(w['age'] - l['age'])} anos mais novo — recuperacao e explosao a favor."
+def _detail_elo(a, b, w, l): return "Rating mais alto, construido contra adversarios de nivel."
+def _detail_streak(a, b, w, l): return f"Vem de {w['streak']} vitoria(s) seguida(s)."
+def _detail_height(a, b, w, l): return f"{abs(w['heightCm'] - l['heightCm'])} cm a mais de altura."
+def _detail_inactive(a, b, w, l): return "Lutou mais recentemente — menos ferrugem."
+def _detail_exp(a, b, w, l): return f"{w['numFights']} lutas no cartel, contra {l['numFights']}."
+
+_FACTOR_META = {
+    "delta_elo": ("Nivel dos adversarios", _detail_elo),
+    "delta_age": ("Juventude", _detail_age),
+    "r_age_over35": ("Fator idade", lambda a, b, w, l: "Idade acima de 35 pesa contra."),
+    "b_age_over35": ("Fator idade", lambda a, b, w, l: "Idade acima de 35 pesa contra."),
+    "delta_reach": ("Alcance e envergadura", _detail_reach),
+    "delta_height": ("Estatura", _detail_height),
+    "delta_streak": ("Momento na carreira", _detail_streak),
+    "delta_win_rate": ("Consistencia de vitorias", lambda a, b, w, l: "Vem vencendo com mais regularidade."),
+    "delta_finish_rate": ("Poder de finalizacao", lambda a, b, w, l: "Mais chance de acabar a luta antes do tempo."),
+    "delta_experience": ("Experiencia no octogono", _detail_exp),
+    "delta_days_inactive": ("Ritmo de luta", _detail_inactive),
+    "delta_roll_sig_landed": ("Volume de golpes", lambda a, b, w, l: "Conecta mais golpes significativos por luta."),
+    "delta_roll_total_str_landed": ("Volume total de golpes", lambda a, b, w, l: "Mantem um ritmo de golpes mais alto."),
+    "delta_roll_td_success": ("Jogo de quedas", lambda a, b, w, l: "Leva vantagem na disputa de quedas e controle."),
+    "delta_roll_td_atmp": ("Iniciativa de quedas", lambda a, b, w, l: "Busca mais a queda para ditar onde a luta acontece."),
+    "delta_roll_sub_att": ("Perigo no chao", lambda a, b, w, l: "Mais recursos de finalizacao se a luta for ao solo."),
+    "delta_roll_kd": ("Poder de nocaute", lambda a, b, w, l: "Mais perigo de knockdown em pe."),
+    "delta_roll_ctrl_seconds": ("Dominio de chao", lambda a, b, w, l: "Controla mais tempo por cima."),
+    "stance_matchup": ("Confronto de bases", lambda a, b, w, l: "A combinacao de guardas (ortodoxa/canhota) favorece."),
+}
+
+
+def _map_factor(raw: str, red: dict, blue: dict) -> dict:
+    """Converte '(Lutador A) Vantagem em delta_elo' no formato do design."""
+    favors = "red" if "(Lutador A)" in raw else "blue"
+    key = raw.split(" ")[-1].strip()
+    winner, loser = (red, blue) if favors == "red" else (blue, red)
+    label, detail_fn = _FACTOR_META.get(key, (key, lambda a, b, w, l: ""))
+    return {"label": label, "detail": detail_fn(red, blue, winner, loser), "favors": favors}
+
+
+@app.post("/api/v1/predict/matchup")
+@limiter.limit("30/minute")
+async def predict_matchup(request: Request, payload: MatchupPayload):
+    """Prediz um confronto por ids (red/blue) e devolve ja no formato do veredito:
+    probabilidades + fatores traduzidos. Monta as features no servidor."""
+    red = _FIGHTERS_BY_ID.get(payload.red)
+    blue = _FIGHTERS_BY_ID.get(payload.blue)
+    if not red or not blue:
+        raise HTTPException(status_code=404, detail="Lutador nao encontrado")
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{INFERENCE_URL}/predict",
+                json={"features": _build_features(red, blue, payload.mode)},
+                headers={"x-internal-api-key": INTERNAL_API_KEY},
+                timeout=5.0,
+            )
+            resp.raise_for_status()
+            pred = resp.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Inference Service indisponivel (Timeout)")
+    except Exception as e:
+        logger.error(f"Erro no predict/matchup: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno do servidor")
+
+    return {
+        "redProbability": round(pred["fighter_a_win_probability"] * 100),
+        "blueProbability": round(pred["fighter_b_win_probability"] * 100),
+        "factors": [_map_factor(f, red, blue) for f in pred.get("key_factors", [])],
+    }
+
+
 _METRICS_PATH = Path(__file__).resolve().parent / "data" / "model_metrics.json"
+
+
+# --- Confrontos em destaque (preditos pelo modelo, calculados no gateway) ---
+_STANCE_ENC = {"Orthodox": 0, "Southpaw": 1, "Switch": 2}
+# Pares recomendados (ids do catalogo). Superfights e classicos reconheciveis.
+_FEATURED_PAIRS = [
+    ("jon-jones", "tom-aspinall"),
+    ("islam-makhachev", "charles-oliveira"),
+    ("alex-pereira", "israel-adesanya"),
+    ("georges-st-pierre", "khabib-nurmagomedov"),
+]
+_featured_cache = None
+
+
+def _build_features(a: dict, b: dict, mode: str = "absoluto") -> dict:
+    """Monta as 26 features de delta a partir de dois lutadores do catalogo
+    (mesma logica/escala usada no treino e no front). No modo 'p4p' as
+    diferencas fisicas (altura/alcance) sao zeradas."""
+    enc_a = _STANCE_ENC.get(a.get("stance"), -1)
+    enc_b = _STANCE_ENC.get(b.get("stance"), -1)
+    p4p = mode == "p4p"
+    return {
+        "delta_elo": a["elo"] - b["elo"],
+        "delta_days_inactive": a["daysInactive"] - b["daysInactive"],
+        "delta_streak": a["streak"] - b["streak"],
+        "delta_win_rate": a["winRate"] - b["winRate"],
+        "delta_finish_rate": a["finishRate"] - b["finishRate"],
+        "delta_experience": a["numFights"] - b["numFights"],
+        "delta_height": 0 if p4p else a["heightCm"] - b["heightCm"],
+        "delta_reach": 0 if p4p else a["reachCm"] - b["reachCm"],
+        "delta_age": a["age"] - b["age"],
+        "r_age_over35": 1 if a["age"] > 35 else 0,
+        "b_age_over35": 1 if b["age"] > 35 else 0,
+        "stance_matchup": enc_a - enc_b,
+        "delta_roll_sig_landed": a["strikingLanded"] - b["strikingLanded"],
+        "delta_roll_sig_atmp": 0,
+        "delta_roll_kd": a["knockdownRate"] - b["knockdownRate"],
+        "delta_roll_td_success": a["takedownSuccess"] - b["takedownSuccess"],
+        "delta_roll_td_atmp": a["tdAtmp"] - b["tdAtmp"],
+        "delta_roll_sub_att": a["subAtt"] - b["subAtt"],
+        "delta_roll_ctrl_seconds": a["ctrlSeconds"] - b["ctrlSeconds"],
+        "delta_roll_sig_str_landed_head": 0,
+        "delta_roll_sig_str_landed_body": 0,
+        "delta_roll_sig_str_landed_leg": 0,
+        "delta_roll_sig_str_landed_distance": 0,
+        "delta_roll_sig_str_landed_clinch": 0,
+        "delta_roll_sig_str_landed_ground": 0,
+        "delta_roll_total_str_landed": a["strikingLanded"] - b["strikingLanded"],
+    }
+
+
+@app.get("/api/v1/featured")
+@limiter.limit("60/minute")
+def get_featured(request: Request):
+    """Confrontos em destaque ja preditos pelo modelo (cacheado apos o 1o calculo)."""
+    global _featured_cache
+    if _featured_cache is not None:
+        return {"matchups": _featured_cache}
+
+    out = []
+    try:
+        with httpx.Client() as client:
+            for id_a, id_b in _FEATURED_PAIRS:
+                a, b = _FIGHTERS_BY_ID.get(id_a), _FIGHTERS_BY_ID.get(id_b)
+                if not a or not b:
+                    continue
+                resp = client.post(
+                    f"{INFERENCE_URL}/predict",
+                    json={"features": _build_features(a, b)},
+                    headers={"x-internal-api-key": INTERNAL_API_KEY},
+                    timeout=5.0,
+                )
+                resp.raise_for_status()
+                pred = resp.json()
+                out.append({
+                    "a": {k: a[k] for k in _LIGHT_FIELDS},
+                    "b": {k: b[k] for k in _LIGHT_FIELDS},
+                    "probA": pred["fighter_a_win_probability"],
+                    "probB": pred["fighter_b_win_probability"],
+                })
+    except Exception as e:
+        logger.error(f"Falha ao montar confrontos em destaque: {e}")
+        # Retorna o que conseguiu (pode ser vazio); nao cacheia falha parcial.
+        return {"matchups": out}
+
+    _featured_cache = out
+    return {"matchups": out}
 
 
 @app.get("/api/v1/model/metrics")
