@@ -17,6 +17,23 @@ def parse_height(height_str: str) -> float:
     except Exception:
         return np.nan
 
+def parse_reach(reach) -> float:
+    """Converte envergadura para cm. Aceita numero (polegadas) ou string como '70"'.
+    Retorna NaN para valores invalidos/nulos."""
+    if pd.isna(reach):
+        return np.nan
+    try:
+        if isinstance(reach, str):
+            cleaned = reach.replace('"', '').replace(' ', '')
+            if cleaned == '':
+                return np.nan
+            inches = float(cleaned)
+        else:
+            inches = float(reach)
+        return round(inches * 2.54, 2)
+    except Exception:
+        return np.nan
+
 def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
     logger.info(f"Iniciando limpeza. Shape original: {df.shape}")
 
@@ -31,7 +48,7 @@ def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
 
     for col in ['r_reach_inches', 'b_reach_inches']:
         if col in df.columns:
-            df[col.replace('_inches', '_cm')] = df[col] * 2.54
+            df[col.replace('_inches', '_cm')] = df[col].apply(parse_reach)
             df = df.drop(columns=[col])
 
     # Substituir colunas que nao existem, usar o que tem
