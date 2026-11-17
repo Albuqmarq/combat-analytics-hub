@@ -130,9 +130,10 @@ _DATA_URL = os.getenv("DATA_URL", "http://localhost:8003")
 _FIGHTERS_PATH = Path(__file__).resolve().parent / "data" / "fighters.json"
 
 
-def _load_catalog():
-    # 1) Servico de dados (Django), com retry enquanto ele sobe.
-    for attempt in range(1, 11):
+def _load_catalog(attempts: int = 5, delay: float = 2.0):
+    # 1) Servico de dados (Django), com retry enquanto ele sobe. Em producao o
+    # gateway so inicia com o 'data' ja healthy, entao a 1a tentativa costuma bastar.
+    for attempt in range(1, attempts + 1):
         try:
             resp = httpx.get(f"{_DATA_URL}/api/catalog/", timeout=10.0)
             resp.raise_for_status()
@@ -141,8 +142,9 @@ def _load_catalog():
                 logger.info(f"Catalogo carregado do servico de dados: {len(data)} atletas")
                 return data
         except Exception as e:
-            logger.warning(f"Servico de dados indisponivel (tentativa {attempt}/10): {e}")
-            time.sleep(3)
+            logger.warning(f"Servico de dados indisponivel (tentativa {attempt}/{attempts}): {e}")
+            if attempt < attempts:
+                time.sleep(delay)
     # 2) Fallback: arquivo local.
     try:
         data = json.loads(_FIGHTERS_PATH.read_text(encoding="utf-8"))
