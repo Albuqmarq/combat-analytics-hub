@@ -12,14 +12,14 @@ services:
       - INTERNAL_API_KEY=${INTERNAL_API_KEY}
       - ADMIN_API_KEY=${ADMIN_API_KEY}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
-      # Driver psycopg2 explicito (SQLAlchemy 2.1 usa psycopg v3 por padrao em 'postgresql://').
-      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-combat_user}:${POSTGRES_PASSWORD:-combat_pass}@db:5432/${POSTGRES_DB:-combat_db}
+      # O catalogo de atletas vem do servico de dados (Django). Fallback: JSON local.
+      - DATA_URL=http://data:8003
     depends_on:
       inference:
         condition: service_started
       mlops:
         condition: service_started
-      db:
+      data:
         condition: service_healthy
     networks:
       - combat_net
@@ -60,6 +60,40 @@ services:
       # O treinamento escreve em /app/models; mapeado para o host e compartilhado
       # com a inferencia (que le o mesmo diretorio via MODELS_DIR).
       - ./services/mlops/models:/app/models
+    networks:
+      - combat_net
+
+  data:
+    build:
+      context: ./services/data
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_USER=${POSTGRES_USER:-combat_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-combat_pass}
+      - POSTGRES_DB=${POSTGRES_DB:-combat_db}
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-dev-insecure-change-me}
+      - DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-*}
+      - DJANGO_CSRF_TRUSTED=${DJANGO_CSRF_TRUSTED:-http://localhost:8003}
+      # Superusuario do Admin (dev). Em producao, defina no .env.
+      - DJANGO_SUPERUSER_USERNAME=${DJANGO_SUPERUSER_USERNAME:-admin}
+      - DJANGO_SUPERUSER_EMAIL=${DJANGO_SUPERUSER_EMAIL:-admin@example.com}
+      - DJANGO_SUPERUSER_PASSWORD=${DJANGO_SUPERUSER_PASSWORD:-admin123}
+      # JSON do catalogo gerado pelo MLOps (montado read-only para o seed inicial).
+      - CATALOG_JSON=/seed/fighters.json
+    volumes:
+      - ./services/gateway/app/data:/seed:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8003/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
     networks:
       - combat_net
 
