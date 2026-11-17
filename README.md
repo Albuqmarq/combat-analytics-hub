@@ -12,6 +12,11 @@ Microserviços independentes orquestrados via Docker Compose:
 | `gateway`   | 8000  | API Gateway — CORS, rate limiting, logs estruturados e proxy resiliente |
 | `inference` | 8001  | Inferência em tempo real (XGBoost + SHAP), protegida por chave interna |
 | `mlops`     | 8002  | Pipeline de feature engineering, treino e explicabilidade |
+| `data`      | 8003  | **Django + DRF** — dono do catálogo no PostgreSQL, com **Admin** para curar os dados |
+| `db`        | 5432  | PostgreSQL (persistência do catálogo) |
+
+O `gateway` carrega o catálogo do serviço `data` na subida (com fallback para um JSON local).
+A interface de administração dos dados fica em **http://localhost:8003/admin** (login padrão `admin` / `admin123` em dev — veja `.env.example`).
 
 ## Como executar
 

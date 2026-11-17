@@ -6,6 +6,7 @@ from slowapi.errors import RateLimitExceeded
 import httpx
 import os
 import json
+import time
 import logging
 from pathlib import Path
 from pydantic import BaseModel
@@ -14,13 +15,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 from app.core.logging import StructuredLoggingMiddleware
-from app.db.database import init_db
 
 # Configurando Rate Limiter
 limiter = Limiter(key_func=get_remote_address)
-
-# Inicializa o banco de dados (com retry enquanto o Postgres sobe).
-init_db()
 
 app = FastAPI(
     title="Combat Analytics Hub - API Gateway",
@@ -126,14 +123,37 @@ async def proxy_train(request: Request):
         logger.error(f"Erro inesperado no proxy train: {e}")
         raise HTTPException(status_code=500, detail="Erro interno do servidor")
 
-# Catalogo de lutadores servido pelo backend (evita embutir ~2MB no bundle do front).
+# Catalogo de lutadores. Fonte primaria: o servico de dados (Django/Postgres).
+# Fallback: o JSON local gerado pelo MLOps (resiliencia se o Django estiver fora).
 # Carregado uma unica vez em memoria na subida do servico.
+_DATA_URL = os.getenv("DATA_URL", "http://localhost:8003")
 _FIGHTERS_PATH = Path(__file__).resolve().parent / "data" / "fighters.json"
-try:
-    _FIGHTERS = json.loads(_FIGHTERS_PATH.read_text(encoding="utf-8"))
-except Exception as e:
-    logger.error(f"Nao foi possivel carregar {_FIGHTERS_PATH}: {e}")
-    _FIGHTERS = []
+
+
+def _load_catalog():
+    # 1) Servico de dados (Django), com retry enquanto ele sobe.
+    for attempt in range(1, 11):
+        try:
+            resp = httpx.get(f"{_DATA_URL}/api/catalog/", timeout=10.0)
+            resp.raise_for_status()
+            data = resp.json()
+            if data:
+                logger.info(f"Catalogo carregado do servico de dados: {len(data)} atletas")
+                return data
+        except Exception as e:
+            logger.warning(f"Servico de dados indisponivel (tentativa {attempt}/10): {e}")
+            time.sleep(3)
+    # 2) Fallback: arquivo local.
+    try:
+        data = json.loads(_FIGHTERS_PATH.read_text(encoding="utf-8"))
+        logger.warning(f"Usando catalogo local de fallback: {len(data)} atletas")
+        return data
+    except Exception as e:
+        logger.error(f"Nao foi possivel carregar o catalogo: {e}")
+        return []
+
+
+_FIGHTERS = _load_catalog()
 
 # Indice por id e uma projecao "leve" para listagem (sem radar/stats detalhados).
 _FIGHTERS_BY_ID = {f["id"]: f for f in _FIGHTERS}
